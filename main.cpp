@@ -23,6 +23,8 @@ typedef std::map<INT_32,std::vector<border>> V_border;
 
 typedef std::map<INT_32,std::vector<INT_32>> Tree_edge;
 
+typedef std::map<point,std::vector<point>> Tree_edge_point_version;
+
 class format {
 public:
     // origin instance data
@@ -43,6 +45,9 @@ public:
     Tree_edge tree_edge;
     void load_steiner_tree(std::string file_name);
 
+    // steiner edge point version
+    Tree_edge_point_version tree_epv;
+    void load_steiner_tree_location(std::string file_name);
 };
 
 void format::load_instance_for_terminals_and_obstacle_corners(std::string file_name) {
@@ -145,7 +150,40 @@ void format::load_steiner_tree(std::string file_name) {
     }
 }
 
+void format::load_steiner_tree_location(std::string file_name) {
+    std::string tem;
+    std::ifstream input_file(file_name);
+    if(!input_file){
+        std::cout<<"error when try to open \""+file_name+"\""<<std::endl;
+        exit(1);
+    }
+    point begin_point;
+    point end_point;
 
+    while(getline(input_file,tem)){
+        if(tem.size()>1){
+            if(tem[0]=='E'){
+                sscanf(tem.c_str(),"E %d%d%d%d ",&begin_point[0],&begin_point[1],&end_point[0],&end_point[1]);
+                auto i = tree_epv.find(begin_point);
+                if(i!=tree_epv.end()){
+                    i->second.push_back(end_point);
+                } else{
+                    tree_epv.insert(std::pair<point ,std::vector<point>>(begin_point,{end_point}));
+                }
+                i = tree_epv.find(end_point);
+                if(i!=tree_epv.end()){
+                    i->second.push_back(begin_point);
+                } else{
+                    tree_epv.insert(std::pair<point ,std::vector<point>>(end_point,{begin_point}));
+                }
+            }
+        }
+    }
+}
+
+
+
+/*
 int main(int argc,char* argv[]) {
     std::cout << "steiner check" << std::endl;
     std::cout << "instance file: " << argv[1]<<std::endl;
@@ -293,7 +331,152 @@ int main(int argc,char* argv[]) {
 
     return 0;
 }
+*/
+
+int main(int argc,char* argv[]) {
+    std::cout << "steiner check" << std::endl;
+    std::cout << "instance file: " << argv[1]<<std::endl;
+    std::cout << "result   file: " << argv[2]<<std::endl;
+    std::cout<<"-----------------------------------------"<<std::endl;
+    std::cout<<"loading file   ................";
+    format f;
+    f.load_instance_for_terminals_and_obstacle_corners(argv[1]);
+    f.load_steiner_tree_location(argv[2]);
+    std::cout<<"\033[32mDONE\033[0m"<<std::endl;
+    std::cout<<"check connect  ................";
+    std::set<point>    accessible;
+    std::vector<point> list;
+    INT_32 current = 0;
+    list.push_back(f.terminals[0]);
+    accessible.insert(f.terminals[0]);
+    while (current<list.size()){
+        auto i = f.tree_epv.find(list[current])->second;
+        for (point n : i) {
+            if (accessible.insert(n).second){
+                list.push_back(n);
+            }
+        }
+        current++;
+    }
+    for (point p : f.terminals) {
+        if(accessible.find(p) == accessible.end()){
+            std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+            return 0;
+        }
+    }
+    if(accessible.size()!=f.tree_epv.size()) {
+        std::cout << "\033[31mERROR\033[0m" << std::endl;
+        return 0;
+    }
+    std::cout<<"\033[32mDONE\033[0m"<<std::endl;
 
 
+    INT_32 total_length = 0;
+    std::cout<<"obstacle avoid ................";
+    H_border h_border;
+    V_border v_border;
+    std::set<point> have_been_to;
+    for(auto o : f.obstacles){
+        // h border
+        auto i = h_border.find(o[1]);
+        if(i == h_border.end()){
+            h_border.insert(std::pair<INT_32,std::vector<border>>(o[1],{{o[0],o[2]}}));
+        } else{
+            i->second.push_back({o[0],o[2]});
+        }
+        i = h_border.find(o[3]);
+        if(i == h_border.end()){
+            h_border.insert(std::pair<INT_32,std::vector<border>>(o[3],{{o[0],o[2]}}));
+        } else{
+            i->second.push_back({o[0],o[2]});
+        }
+
+        // v border
+        i = v_border.find(o[0]);
+        if(i == v_border.end()){
+            v_border.insert(std::pair<INT_32,std::vector<border>>(o[0],{{o[1],o[3]}}));
+        } else{
+            i->second.push_back({o[1],o[3]});
+        }
+        i = v_border.find(o[2]);
+        if(i == v_border.end()){
+            v_border.insert(std::pair<INT_32,std::vector<border>>(o[2],{{o[1],o[3]}}));
+        } else{
+            i->second.push_back({o[1],o[3]});
+        }
+    }
+    for(auto e : f.tree_epv){
+        point begin_point = e.first;
+        have_been_to.insert(begin_point);
+        for (point end_point : e.second) {
+            if(have_been_to.find(end_point) != have_been_to.end()) continue;
+            if (begin_point[0]==end_point[0]){
+                if(begin_point[1]<end_point[1]){
+                    total_length += end_point[1] - begin_point[1];
+                    auto iter = h_border.upper_bound(begin_point[1]);
+                    while (iter->first<end_point[1]){
+                        for (auto b : iter->second) {
+                            if(begin_point[0]>b[0]&&begin_point[0]<b[1]){
+                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                                return 0;
+                            }
+                        }
+                        iter++;
+                    }
+                }else{
+                    total_length += begin_point[1] - end_point[1];
+                    auto iter = h_border.upper_bound(end_point[1]);
+                    while (iter->first<begin_point[1]){
+                        for (auto b : iter->second) {
+                            if(begin_point[0]>b[0]&&begin_point[0]<b[1]){
+                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                                return 0;
+                            }
+                        }
+                        iter++;
+                    }
+                }
+            } else if(begin_point[1] == end_point[1]){
+
+                if(begin_point[0]<end_point[0]){
+                    total_length += end_point[0] - begin_point[0];
+                    auto iter = v_border.upper_bound(begin_point[0]);
+                    while (iter->first<end_point[0]){
+                        for (auto b : iter->second) {
+                            if(begin_point[1]>b[0]&&begin_point[1]<b[1]){
+                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                                return 0;
+                            }
+                        }
+                        iter++;
+                    }
+                }else{
+                    total_length += begin_point[0] - end_point[0];
+                    auto iter = v_border.upper_bound(end_point[0]);
+                    while (iter->first<begin_point[0]){
+                        for (auto b : iter->second) {
+                            if(begin_point[1]>b[0]&&begin_point[1]<b[1]){
+                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                                return 0;
+                            }
+                        }
+                        iter++;
+                    }
+                }
+            }else{
+                // not a rect line
+                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                return 0;
+            }
+        }
+    }
+
+    std::cout<<"\033[32mDONE\033[0m"<<std::endl;
+    std::cout<<"total length: \033[34m"<<total_length<<"\033[0m"<<std::endl;
+
+
+
+    return 0;
+}
 
 
