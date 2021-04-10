@@ -452,7 +452,7 @@ int main(int argc,char* argv[]) {
                 }
                 auto left_border_i = left_border.lower_bound({from_x,0,0});
                 while (left_border_i!=left_border.end()){
-                    if((*left_border_i)[1]>=to_x)
+                    if((*left_border_i)[0]>=to_x)
                         break;
                     if((*left_border_i)[1]<in_y&&in_y<(*left_border_i)[2]){
                         std::cout<<"\033[31mERROR\033[0m"<<std::endl;
