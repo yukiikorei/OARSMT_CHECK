@@ -442,6 +442,7 @@ int main(int argc,char* argv[]) {
                     }
                     up_border_i++;
                 }
+                total_length+=to_y-from_y;
             } else if(begin_point[1] == end_point[1]){
                 INT_32 in_y   = begin_point[1];
                 INT_32 from_x = begin_point[0];
@@ -470,6 +471,7 @@ int main(int argc,char* argv[]) {
                     }
                     right_border_i++;
                 }
+                total_length+=to_x-from_x;
             }else{
                 // not a rect line
                 std::cout<<"\033[31mERROR\033[0m"<<std::endl;
