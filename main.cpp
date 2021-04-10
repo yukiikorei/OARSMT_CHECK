@@ -18,11 +18,34 @@ typedef std::array<INT_32,2> segment;
 typedef std::array<INT_32,3> corner;
 typedef std::array<INT_32,4> obstacle; // left-down right-up
 typedef std::array<INT_32,2> border;    // tow_location
-typedef std::map<INT_32,std::vector<border>> H_border;
-typedef std::map<INT_32,std::vector<border>> V_border;
+
+class border_cmp_increase{
+public:
+    bool operator()(const std::array<INT_32,3>& a,const std::array<INT_32,3>& b)const{
+        if(a[0]<b[0]) return true;
+        else if(a[0]==b[0]){
+            if(a[1]<b[1]) return true;
+            else if(a[1]==b[1]) return a[2]<b[2];
+            else return false;
+        }else
+            return false;
+    }
+};
+class border_cmp_decrease{
+public:
+    bool operator()(const std::array<INT_32,3>& a,const std::array<INT_32,3>& b)const{
+        if(a[0]>b[0]) return true;
+        else if(a[0]==b[0]){
+            if(a[1]<b[1]) return true;
+            else if(a[1]==b[1]) return a[2]<b[2];
+            else return false;
+        }else
+            return false;
+    }
+};
+
 
 typedef std::map<INT_32,std::vector<INT_32>> Tree_edge;
-
 typedef std::map<point,std::vector<point>> Tree_edge_point_version;
 
 class format {
@@ -31,10 +54,10 @@ public:
     std::vector<point>      terminals;
     std::vector<obstacle>   obstacles;
     std::vector<corner>     obstacle_corners;
-    INT_32 left_border;
-    INT_32 right_border;
-    INT_32 down_border;
-    INT_32 up_border;
+    INT_32 left_bound;
+    INT_32 right_bound;
+    INT_32 down_bound;
+    INT_32 up_bound;
     void load_instance_for_terminals_and_obstacle_corners(std::string file_name);
 
     // node index to location( from escape segment )
@@ -54,10 +77,10 @@ void format::load_instance_for_terminals_and_obstacle_corners(std::string file_n
 
     std::string tem;
     std::ifstream input_file(file_name);
-    left_border     = INT_32_MAX;
-    up_border       = INT_32_MAX;
-    right_border    = 0;
-    up_border       = 0;
+    left_bound     = INT_32_MAX;
+    up_bound       = INT_32_MAX;
+    right_bound    = 0;
+    up_bound       = 0;
 
     if(!input_file){
         std::cout<<"error when try to open \""+file_name+"\""<<std::endl;
@@ -70,10 +93,10 @@ void format::load_instance_for_terminals_and_obstacle_corners(std::string file_n
                 INT_32 x,y,i;
                 sscanf(tem.c_str(),"DD%d%d%d",&i,&x,&y);
                 terminals.push_back({x,y});
-                if(x<left_border)   left_border     = x;
-                if(x>right_border)  right_border    = x;
-                if(y<down_border)   down_border     = y;
-                if(y>up_border)     up_border       = y;
+                if(x < left_bound) left_bound     = x;
+                if(x > right_bound) right_bound    = x;
+                if(y < down_bound) down_bound     = y;
+                if(y > up_bound) up_bound       = y;
             }else if(tem[0]=='R'&&tem[1]=='R'){
                 INT_32 left,down,right,up;
                 sscanf(tem.c_str(),"RR%d%d%d%d",&left,&down,&right,&up);
@@ -83,10 +106,10 @@ void format::load_instance_for_terminals_and_obstacle_corners(std::string file_n
                 obstacle_corners.push_back({right,up,RIGHT_UP});
                 obstacle_corners.push_back({right,down,RIGHT_DOWN});
 
-                if(left<left_border)    left_border    = left;
-                if(right>right_border)  right_border   = right;
-                if(down<down_border)    down_border    = up;
-                if(up>up_border)        up_border      = up;
+                if(left < left_bound) left_bound    = left;
+                if(right > right_bound) right_bound   = right;
+                if(down < down_bound) down_bound    = up;
+                if(up > up_bound) up_bound      = up;
             }
         }
     }
@@ -373,37 +396,18 @@ int main(int argc,char* argv[]) {
 
     INT_32 total_length = 0;
     std::cout<<"obstacle avoid ................";
-    H_border h_border;
-    V_border v_border;
+
+    std::set<std::array<INT_32,3>,border_cmp_decrease> up_border;
+    std::set<std::array<INT_32,3>,border_cmp_increase> down_border;
+    std::set<std::array<INT_32,3>,border_cmp_increase> left_border;
+    std::set<std::array<INT_32,3>,border_cmp_decrease> right_border;
+
     std::set<point> have_been_to;
     for(auto o : f.obstacles){
-        // h border
-        auto i = h_border.find(o[1]);
-        if(i == h_border.end()){
-            h_border.insert(std::pair<INT_32,std::vector<border>>(o[1],{{o[0],o[2]}}));
-        } else{
-            i->second.push_back({o[0],o[2]});
-        }
-        i = h_border.find(o[3]);
-        if(i == h_border.end()){
-            h_border.insert(std::pair<INT_32,std::vector<border>>(o[3],{{o[0],o[2]}}));
-        } else{
-            i->second.push_back({o[0],o[2]});
-        }
-
-        // v border
-        i = v_border.find(o[0]);
-        if(i == v_border.end()){
-            v_border.insert(std::pair<INT_32,std::vector<border>>(o[0],{{o[1],o[3]}}));
-        } else{
-            i->second.push_back({o[1],o[3]});
-        }
-        i = v_border.find(o[2]);
-        if(i == v_border.end()){
-            v_border.insert(std::pair<INT_32,std::vector<border>>(o[2],{{o[1],o[3]}}));
-        } else{
-            i->second.push_back({o[1],o[3]});
-        }
+        up_border.insert({o[3],o[0],o[2]});
+        down_border.insert({o[1],o[0],o[2]});
+        left_border.insert({o[0],o[1],o[3]});
+        right_border.insert({o[2],o[1],o[3]});
     }
     for(auto e : f.tree_epv){
         point begin_point = e.first;
@@ -411,57 +415,60 @@ int main(int argc,char* argv[]) {
         for (point end_point : e.second) {
             if(have_been_to.find(end_point) != have_been_to.end()) continue;
             if (begin_point[0]==end_point[0]){
-                if(begin_point[1]<end_point[1]){
-                    total_length += end_point[1] - begin_point[1];
-                    auto iter = h_border.upper_bound(begin_point[1]);
-                    while (iter->first<end_point[1]){
-                        for (auto b : iter->second) {
-                            if(begin_point[0]>b[0]&&begin_point[0]<b[1]){
-                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
-                                return 0;
-                            }
-                        }
-                        iter++;
+                INT_32 in_x   = begin_point[0];
+                INT_32 from_y = begin_point[1];
+                INT_32 to_y   = end_point[1];
+                if(from_y>to_y){
+                    from_y = end_point[1];
+                    to_y   = begin_point[1];
+                }
+                auto down_border_i = down_border.lower_bound({from_y,0,0});
+                while (down_border_i!=down_border.end()){
+                    if((*down_border_i)[0]>=to_y)
+                        break;
+                    if((*down_border_i)[1]<in_x&&in_x<(*down_border_i)[2]){
+                        std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                        return 0;
                     }
-                }else{
-                    total_length += begin_point[1] - end_point[1];
-                    auto iter = h_border.upper_bound(end_point[1]);
-                    while (iter->first<begin_point[1]){
-                        for (auto b : iter->second) {
-                            if(begin_point[0]>b[0]&&begin_point[0]<b[1]){
-                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
-                                return 0;
-                            }
-                        }
-                        iter++;
+                    down_border_i++;
+                }
+                auto up_border_i = up_border.lower_bound({to_y,0,0});
+                while (up_border_i!=up_border.end()){
+                    if((*up_border_i)[0]<=from_y)
+                        break;
+                    if((*up_border_i)[1]<in_x&&in_x<(*up_border_i)[2]){
+                        std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                        return 0;
                     }
+                    up_border_i++;
                 }
             } else if(begin_point[1] == end_point[1]){
-
-                if(begin_point[0]<end_point[0]){
-                    total_length += end_point[0] - begin_point[0];
-                    auto iter = v_border.upper_bound(begin_point[0]);
-                    while (iter->first<end_point[0]){
-                        for (auto b : iter->second) {
-                            if(begin_point[1]>b[0]&&begin_point[1]<b[1]){
-                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
-                                return 0;
-                            }
-                        }
-                        iter++;
+                INT_32 in_y   = begin_point[1];
+                INT_32 from_x = begin_point[0];
+                INT_32 to_x   = end_point[0];
+                if(from_x>to_x){
+                    from_x = end_point[1];
+                    to_x   = begin_point[1];
+                }
+                auto left_border_i = left_border.lower_bound({from_x,0,0});
+                while (left_border_i!=left_border.end()){
+                    if((*left_border_i)[1]>=to_x)
+                        break;
+                    if((*left_border_i)[1]<in_y&&in_y<(*left_border_i)[2]){
+                        std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                        return 0;
                     }
-                }else{
-                    total_length += begin_point[0] - end_point[0];
-                    auto iter = v_border.upper_bound(end_point[0]);
-                    while (iter->first<begin_point[0]){
-                        for (auto b : iter->second) {
-                            if(begin_point[1]>b[0]&&begin_point[1]<b[1]){
-                                std::cout<<"\033[31mERROR\033[0m"<<std::endl;
-                                return 0;
-                            }
-                        }
-                        iter++;
+                    left_border_i++;
+                }
+                auto right_border_i = right_border.lower_bound({to_x,0,0});
+                while (right_border_i!=right_border.end()){
+                    if((*right_border_i)[0]<=from_x)
+                        break;
+                    if((*right_border_i)[1]<in_y&&in_y<(*right_border_i)[2]){
+                        std::cout<<"\033[31mERROR\033[0m"<<std::endl;
+                        return 0;
                     }
+                    right_border_i++;
                 }
             }else{
                 // not a rect line
